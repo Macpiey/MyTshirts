@@ -18,9 +18,10 @@ public class JwtUtil {
     @Value("${jwt.expirationMs}")
     private int jwtExpirationMs;
 
-    public String generateToken(UserDetails userDetails) {
+    public String generateToken(UserDetails userDetails, String userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("username", userDetails.getUsername());
+        claims.put("userId", userId); // Add userId to claims
 
         return Jwts.builder()
                 .setClaims(claims)
@@ -46,6 +47,10 @@ public class JwtUtil {
 
     public String extractUsername(String token) {
         return extractAllClaims(token).getSubject();
+    }
+
+    public String extractUserId(String token) {
+        return extractAllClaims(token).get("userId", String.class); // Extract userId from claims
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {

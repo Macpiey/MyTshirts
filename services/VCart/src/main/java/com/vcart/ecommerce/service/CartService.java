@@ -8,7 +8,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class CartService {
@@ -40,28 +42,32 @@ public class CartService {
     }
 
     // Add to cart
-    public CartItem addToCart(String userId, String productId, int quantity) {
-        // Validate Product ID
+    public CartItem addToCart(String userId, String productId, int quantity, String fileUploadedName) {
         Product product = productService.getProductById(productId);
         if (product == null) {
             throw new IllegalArgumentException("Product with ID " + productId + " does not exist.");
         }
-
-        // Validate User ID
         boolean userExists = userRepository.findById(userId).isPresent();
         if (!userExists) {
             throw new IllegalArgumentException("User with ID " + userId + " does not exist.");
         }
 
-        // Create Cart Item
-        CartItem cartItem = new CartItem();
-        cartItem.setUserId(userId);
-        cartItem.setProductId(productId);
-        cartItem.setProductName(product.getName());
-        cartItem.setPrice(product.getPrice());
-        cartItem.setQuantity(quantity);
+        Optional<CartItem> existingCartItemOpt = cartItemRepository.findByUserIdAndProductId(userId, productId);
 
-        // Save to repository
+        CartItem cartItem;
+        if (existingCartItemOpt.isPresent()) {
+            cartItem = existingCartItemOpt.get();
+            cartItem.setQuantity(cartItem.getQuantity() + quantity);
+        } else {
+            cartItem = new CartItem();
+            cartItem.setUserId(userId);
+            cartItem.setProductId(productId);
+            cartItem.setProductName(product.getName());
+            cartItem.setPrice(product.getPrice());
+            cartItem.setQuantity(quantity);
+            cartItem.setImageUrl(product.getImageUrl());
+            cartItem.setFileUploadedName(fileUploadedName);
+        }
         return cartItemRepository.save(cartItem);
     }
 

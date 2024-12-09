@@ -43,5 +43,12 @@ public class AuthServiceImpl implements AuthService {
 
         return signUpRequest;
     }
+    public String getUserIdByEmail(String email) {
+        // Assuming a UserRepository exists
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
+        return user.getId();
+    }
+
 }
 

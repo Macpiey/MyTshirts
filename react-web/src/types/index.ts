@@ -8,8 +8,14 @@ export interface Product {
   designFile?: string;
 }
 
-export interface CartItem extends Product {
+export interface CartItem {
+  id: string; // Cart item ID from API
+  productId: string;
+  name: string; // productName from API
+  imageUrl: string;
+  price: number;
   quantity: number;
+  designFile?: string;
 }
 
 export interface CustomerDetails {

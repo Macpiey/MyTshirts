@@ -1,105 +1,101 @@
-import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
-import FilterSection from '../components/FilterSection';
-import ProductGrid from '../components/ProductGrid';
-import { Product } from '../types';
-
-// Simulated products data
-const products: Product[] = [
-  {
-    id: 1,
-    name: 'Classic White T-Shirt',
-    description: 'Premium cotton t-shirt perfect for everyday wear',
-    price: 29.99,
-    category: 't-shirts',
-    imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab',
-  },
-  {
-    id: 2,
-    name: 'Slim Fit Jeans',
-    description: 'Modern slim fit jeans in dark wash',
-    price: 59.99,
-    category: 'pants',
-    imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80',
-  },
-  {
-    id: 3,
-    name: 'Comfort Sweatpants',
-    description: 'Cozy sweatpants for ultimate comfort',
-    price: 39.99,
-    category: 'sweatpants',
-    imageUrl: 'https://images.unsplash.com/photo-1583744946564-b52ac1c389c8',
-  },
-  {
-    id: 4,
-    name: 'Classic Hoodie',
-    description: 'Warm and comfortable hoodie for any occasion',
-    price: 49.99,
-    category: 'sweatshirts',
-    imageUrl: 'https://images.unsplash.com/photo-1578587018452-892bacefd3f2',
-  },
-  {
-    id: 5,
-    name: 'Graphic T-Shirt',
-    description: 'Unique graphic design t-shirt',
-    price: 34.99,
-    category: 't-shirts',
-    imageUrl: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27',
-  },
-  {
-    id: 6,
-    name: 'Cargo Pants',
-    description: 'Functional cargo pants with multiple pockets',
-    price: 69.99,
-    category: 'pants',
-    imageUrl: 'https://images.unsplash.com/photo-1517445312882-bc9910d016b7',
-  }
-];
+// src/pages/CategoryPage.tsx
+import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import FilterSection from "../components/FilterSection";
+import ProductGrid from "../components/ProductGrid";
+import { Product } from "../types";
+import axios from "axios";
 
 export default function CategoryPage() {
   const { category } = useParams<{ category: string }>();
-  const [selectedSort, setSelectedSort] = useState('newest');
-  const [selectedPriceRange, setSelectedPriceRange] = useState('all');
+  const [selectedSort, setSelectedSort] = useState("newest");
+  const [selectedPriceRange, setSelectedPriceRange] = useState("all");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const categoryProducts = products.filter(
-    (product) => product.category.toLowerCase() === category?.toLowerCase()
-  );
+  useEffect(() => {
+    // Fetch products from the API
+    const fetchProducts = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await axios.get<Product[]>(
+          "http://localhost:8080/products"
+        );
+        setProducts(response.data);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to fetch products. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Apply sorting
-  const sortedProducts = [...categoryProducts].sort((a, b) => {
-    switch (selectedSort) {
-      case 'price-low':
-        return a.price - b.price;
-      case 'price-high':
-        return b.price - a.price;
-      case 'popular':
-        return 0; // In a real app, would sort by popularity metric
-      default:
-        return 0; // Newest first would use creation date
-    }
-  });
+    fetchProducts();
+  }, []);
 
-  // Apply price filtering
-  const filteredProducts = sortedProducts.filter((product) => {
-    switch (selectedPriceRange) {
-      case '0-25':
-        return product.price < 25;
-      case '25-50':
-        return product.price >= 25 && product.price < 50;
-      case '50-100':
-        return product.price >= 50 && product.price < 100;
-      case '100+':
-        return product.price >= 100;
-      default:
-        return true;
-    }
-  });
+  useEffect(() => {
+    // Filter products by category
+    const categoryProducts = products.filter(
+      (product) => product.category.toLowerCase() === category?.toLowerCase()
+    );
+
+    // Apply price filtering
+    const priceFiltered = categoryProducts.filter((product) => {
+      switch (selectedPriceRange) {
+        case "0-25":
+          return product.price < 25;
+        case "25-50":
+          return product.price >= 25 && product.price < 50;
+        case "50-100":
+          return product.price >= 50 && product.price < 100;
+        case "100+":
+          return product.price >= 100;
+        default:
+          return true;
+      }
+    });
+
+    // Apply sorting
+    const sortedProducts = [...priceFiltered].sort((a, b) => {
+      switch (selectedSort) {
+        case "price-low":
+          return a.price - b.price;
+        case "price-high":
+          return b.price - a.price;
+        case "popular":
+          return 0; // Implement popularity logic if available
+        default:
+          return 0; // Newest first would require a date field
+      }
+    });
+
+    setFilteredProducts(sortedProducts);
+  }, [products, category, selectedSort, selectedPriceRange]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p className="text-gray-600">Loading products...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2 capitalize">
-          {category?.replace('-', ' ')}
+          {category?.replace("-", " ")}
         </h1>
         <p className="text-gray-600">
           {filteredProducts.length} items found in {category}
@@ -115,10 +111,12 @@ export default function CategoryPage() {
 
       {filteredProducts.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-gray-600">No products found matching your criteria.</p>
+          <p className="text-gray-600">
+            No products found matching your criteria.
+          </p>
         </div>
       ) : (
-        <ProductGrid products={filteredProducts} category={category || ''} />
+        <ProductGrid products={filteredProducts} category={category || ""} />
       )}
     </div>
   );

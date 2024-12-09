@@ -1,29 +1,17 @@
-import React, { useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
-import { useCart } from '../context/CartContext';
-import { Product } from '../types';
-import { Plus, Minus, Upload, Check, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import { useCart } from "../context/CartContext";
+import { Product } from "../types";
+import { Plus, Minus, Upload, Check, AlertCircle } from "lucide-react";
+import axios from "axios";
+import Cookies from "js-cookie";
+import { jwtDecode } from "jwt-decode"; // Correct import for jwtDecode
 
-// Simulated products data - in a real app, this would come from your backend
-const productsData: Record<number, Product> = {
-  1: {
-    id: 1,
-    name: 'Classic White T-Shirt',
-    description: 'Premium cotton t-shirt perfect for everyday wear',
-    price: 29.99,
-    category: 't-shirts',
-    imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab',
-  },
-  2: {
-    id: 2,
-    name: 'Slim Fit Jeans',
-    description: 'Modern slim fit jeans in dark wash',
-    price: 59.99,
-    category: 'pants',
-    imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80',
-  },
-  // Add more products as needed
-};
+// Define the shape of your JWT payload
+interface JwtPayload {
+  userId: string;
+  // Add other fields if necessary
+}
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,40 +21,142 @@ export default function ProductPage() {
   const [showSuccess, setShowSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const product = productsData[Number(id)];
-  
-  if (!product) {
+  const [products, setProducts] = useState<Product[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch products from API
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await axios.get<Product[]>(
+          "http://localhost:8080/products"
+        );
+        setProducts(response.data);
+        setLoading(false);
+      } catch (err) {
+        console.error("Error fetching products:", err);
+        setError("Failed to load products. Please try again later.");
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  // Find the product by ID
+  const product = products ? products.find((p) => p.id === id) : null;
+
+  if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 text-center">
-        <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Not Found</h2>
-        <p className="text-gray-600">The product you're looking for doesn't exist.</p>
+        <p className="text-gray-600">Loading product...</p>
       </div>
     );
   }
 
-  const handleAddToCart = () => {
-    dispatch({ 
-      type: 'ADD_TO_CART', 
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
+        <p className="text-gray-600">{error}</p>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+          Product Not Found
+        </h2>
+        <p className="text-gray-600">
+          The product you're looking for doesn't exist.
+        </p>
+      </div>
+    );
+  }
+
+  // Helper function to get JWT token from cookies
+  const getJwtToken = (): string | null => {
+    return Cookies.get("jwtToken") || null; // Replace 'jwtToken' with your actual cookie name
+  };
+
+  // Helper function to decode JWT and get userId
+  const getUserIdFromToken = (token: string): string | null => {
+    try {
+      const decoded = jwtDecode<JwtPayload>(token);
+      return decoded.userId; // Corrected from decoded.username to decoded.userId
+    } catch (error) {
+      console.error("Failed to decode JWT:", error);
+      return null;
+    }
+  };
+
+  const handleAddToCart = async () => {
+    // Dispatch to local cart context
+    dispatch({
+      type: "ADD_TO_CART",
       payload: {
         ...product,
-        designFile: designFile ? designFile.name : undefined
-      }
+        designFile: designFile ? designFile.name : undefined,
+        quantity,
+      },
     });
+
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 2000);
+
+    // Get JWT token from cookies
+    const token = getJwtToken();
+
+    if (token) {
+      const userId = getUserIdFromToken(token);
+
+      if (!userId) {
+        console.error("User ID not found in token.");
+        return;
+      }
+
+      // Prepare the payload
+      const payload = {
+        userId,
+        productId: product.id,
+        productName: product.name,
+        price: product.price,
+        quantity,
+      };
+
+      try {
+        await axios.post("http://localhost:8080/cart/add", payload, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        console.log("Cart updated on server.");
+      } catch (error) {
+        console.error("Failed to add to cart on server:", error);
+        // Optionally, you can revert the local cart update or notify the user
+      }
+    } else {
+      console.log("No JWT token found. Cart updated locally only.");
+    }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
+    if (file && file.type === "application/pdf") {
       setDesignFile(file);
     } else {
-      alert('Please upload a PDF file');
+      alert("Please upload a PDF file");
     }
   };
 
-  const isTshirt = product.category.toLowerCase() === 't-shirts';
+  // Use the 'customizable' field instead of category to determine if custom design is available
+  const isCustomizable = product.customizable;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -88,13 +178,17 @@ export default function ProductPage() {
         {/* Product Details */}
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {product.name}
+            </h1>
             <p className="text-2xl text-primary-600 font-semibold">
               ${product.price.toFixed(2)}
             </p>
           </div>
 
-          <p className="text-gray-600 text-lg leading-relaxed">{product.description}</p>
+          <p className="text-gray-600 text-lg leading-relaxed">
+            {product.description}
+          </p>
 
           <div className="border-t border-b border-gray-200 py-6">
             <div className="flex items-center justify-between mb-4">
@@ -106,7 +200,9 @@ export default function ProductPage() {
                 >
                   <Minus size={20} />
                 </button>
-                <span className="text-xl font-medium w-8 text-center">{quantity}</span>
+                <span className="text-xl font-medium w-8 text-center">
+                  {quantity}
+                </span>
                 <button
                   onClick={() => setQuantity(quantity + 1)}
                   className="p-2 rounded-full border border-gray-300 hover:bg-gray-100 transition-colors"
@@ -116,9 +212,11 @@ export default function ProductPage() {
               </div>
             </div>
 
-            {isTshirt && (
+            {isCustomizable && (
               <div className="space-y-4">
-                <span className="text-gray-700 font-medium block">Custom Design</span>
+                <span className="text-gray-700 font-medium block">
+                  Custom Design
+                </span>
                 <input
                   type="file"
                   accept=".pdf"
@@ -130,8 +228,8 @@ export default function ProductPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className={`flex items-center justify-center space-x-2 w-full py-3 px-4 rounded-md border-2 border-dashed transition-colors ${
                     designFile
-                      ? 'border-primary-500 bg-primary-50 text-primary-700'
-                      : 'border-gray-300 hover:border-primary-500 hover:bg-gray-50'
+                      ? "border-primary-500 bg-primary-50 text-primary-700"
+                      : "border-gray-300 hover:border-primary-500 hover:bg-gray-50"
                   }`}
                 >
                   {designFile ? (
@@ -160,7 +258,7 @@ export default function ProductPage() {
                 <span>Added to Cart!</span>
               </span>
             ) : (
-              'Add to Cart'
+              "Add to Cart"
             )}
           </button>
 

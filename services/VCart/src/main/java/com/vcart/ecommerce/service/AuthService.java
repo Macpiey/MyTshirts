@@ -4,4 +4,5 @@ import com.vcart.ecommerce.payload.request.SignUpRequest;
 
 public interface AuthService {
     SignUpRequest registerUser(SignUpRequest signUpRequest);
+    String getUserIdByEmail(String email);
 }

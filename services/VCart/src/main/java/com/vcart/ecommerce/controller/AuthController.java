@@ -38,12 +38,19 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> loginUser(@Valid @RequestBody LoginRequest loginRequest) {
+        // Authenticate the user
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
         );
 
+        // Load user details
         final UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getEmail());
-        final String jwt = jwtUtil.generateToken(userDetails);
+
+        // Retrieve the userId from the service (assumes userId is retrievable by email)
+        String userId = authService.getUserIdByEmail(loginRequest.getEmail());
+
+        // Generate the JWT with the userId
+        final String jwt = jwtUtil.generateToken(userDetails, userId);
 
         return ResponseEntity.ok(new LoginResponse("Login successful", jwt));
     }

@@ -1,15 +1,32 @@
-import React, { createContext, useContext, useReducer } from 'react';
-import { User, AuthState } from '../types/auth';
+// src/context/AuthContext.tsx
+import React, {
+  createContext,
+  useReducer,
+  useContext,
+  ReactNode,
+  useEffect,
+} from "react";
+import Cookies from "js-cookie";
+import { jwtDecode } from "jwt-decode";
+
+interface AuthState {
+  isAuthenticated: boolean;
+  userEmail: string | null;
+  jwtToken: string | null;
+  loading: boolean;
+  error: string | null;
+}
 
 type AuthAction =
-  | { type: 'AUTH_START' }
-  | { type: 'AUTH_SUCCESS'; payload: User }
-  | { type: 'AUTH_FAILURE'; payload: string }
-  | { type: 'LOGOUT' };
+  | { type: "AUTH_START" }
+  | { type: "AUTH_SUCCESS"; payload: { jwtToken: string } }
+  | { type: "AUTH_FAILURE"; payload: string }
+  | { type: "SIGN_OUT" };
 
 const initialState: AuthState = {
-  user: null,
   isAuthenticated: false,
+  userEmail: null,
+  jwtToken: null,
   loading: false,
   error: null,
 };
@@ -17,49 +34,44 @@ const initialState: AuthState = {
 const AuthContext = createContext<{
   state: AuthState;
   dispatch: React.Dispatch<AuthAction>;
-} | null>(null);
+}>({
+  state: initialState,
+  dispatch: () => null,
+});
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
-    case 'AUTH_START':
+    case "AUTH_START":
+      return { ...state, loading: true, error: null };
+    case "AUTH_SUCCESS":
+      const decoded: any = jwtDecode(action.payload.jwtToken);
       return {
         ...state,
-        loading: true,
-        error: null,
-      };
-    case 'AUTH_SUCCESS':
-      return {
-        ...state,
-        user: action.payload,
         isAuthenticated: true,
+        userEmail: decoded.username || decoded.email || null,
+        jwtToken: action.payload.jwtToken,
         loading: false,
         error: null,
       };
-    case 'AUTH_FAILURE':
-      return {
-        ...state,
-        user: null,
-        isAuthenticated: false,
-        loading: false,
-        error: action.payload,
-      };
-    case 'LOGOUT':
-      return {
-        ...state,
-        user: null,
-        isAuthenticated: false,
-        loading: false,
-        error: null,
-      };
+    case "AUTH_FAILURE":
+      return { ...state, loading: false, error: action.payload };
+    case "SIGN_OUT":
+      return { ...initialState };
     default:
       return state;
   }
 };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
+
+  // On initial mount, check if a JWT token exists in cookies
+  useEffect(() => {
+    const token = Cookies.get("jwtToken");
+    if (token) {
+      dispatch({ type: "AUTH_SUCCESS", payload: { jwtToken: token } });
+    }
+  }, []);
 
   return (
     <AuthContext.Provider value={{ state, dispatch }}>
@@ -68,10 +80,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);

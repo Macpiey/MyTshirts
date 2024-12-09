@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Loader } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import * as api from '../../services/api';
+// src/components/LoginForm.tsx
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Mail, Lock, Loader } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import axios from "axios";
+import Cookies from "js-cookie";
 
 export default function LoginForm() {
   const navigate = useNavigate();
   const { dispatch } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,15 +20,40 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      dispatch({ type: 'AUTH_START' });
-      const user = await api.login({ email, password });
-      dispatch({ type: 'AUTH_SUCCESS', payload: user });
-      navigate('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      dispatch({ type: "AUTH_START" });
+
+      const response = await axios.post(
+        "http://localhost:8080/api/auth/login",
+        {
+          email,
+          password,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const { jwtToken, message } = response.data;
+
+      // Set JWT token in browser cookies
+      Cookies.set("jwtToken", jwtToken, { expires: 7 }); // Expires in 7 days
+
+      dispatch({ type: "AUTH_SUCCESS", payload: { jwtToken } });
+      navigate("/");
+    } catch (err: any) {
+      let errorMessage = "Login failed";
+
+      // Check if error response exists and contains a message
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      }
+
+      setError(errorMessage);
       dispatch({
-        type: 'AUTH_FAILURE',
-        payload: err instanceof Error ? err.message : 'Login failed',
+        type: "AUTH_FAILURE",
+        payload: errorMessage,
       });
     } finally {
       setLoading(false);
@@ -98,11 +125,7 @@ export default function LoginForm() {
             disabled={loading}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? (
-              <Loader className="w-5 h-5 animate-spin" />
-            ) : (
-              'Sign In'
-            )}
+            {loading ? <Loader className="w-5 h-5 animate-spin" /> : "Sign In"}
           </button>
         </div>
       </form>
@@ -121,7 +144,7 @@ export default function LoginForm() {
 
         <div className="mt-6">
           <button
-            onClick={() => navigate('/register')}
+            onClick={() => navigate("/register")}
             className="w-full flex justify-center py-2 px-4 border border-primary-600 rounded-md shadow-sm text-sm font-medium text-primary-600 bg-white hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             Create Account

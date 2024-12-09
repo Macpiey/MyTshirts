@@ -1,7 +1,11 @@
-import React, { useState } from "react";
+// src/pages/CartPage.tsx
+import React, { useState, useEffect } from "react";
 import { useCart } from "../context/CartContext";
-import { CustomerDetails } from "../types";
+import { CustomerDetails, CartItem } from "../types";
 import { X, ShoppingBag, CreditCard, Truck, Check } from "lucide-react";
+import { jwtDecode } from "jwt-decode"; // Corrected import
+import axios from "axios";
+import Cookies from "js-cookie";
 
 export default function CartPage() {
   const { state, dispatch } = useCart();
@@ -16,33 +20,170 @@ export default function CartPage() {
     zipCode: "",
   });
   const [orderId] = useState(() => Math.floor(Math.random() * 1000000));
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Define the structure of your JWT payload
+  interface JwtPayload {
+    userId: string;
+    // Add other fields if necessary
+  }
+
+  // Decode JWT token to get userId
+  const getUserId = (): string | null => {
+    const token = Cookies.get("jwtToken");
+    if (!token) return null;
+
+    try {
+      const decoded = jwtDecode<JwtPayload>(token);
+      return decoded.userId;
+    } catch (err) {
+      console.error("Invalid JWT token:", err);
+      return null;
+    }
+  };
+
+  // Fetch cart function to synchronize state after errors or updates
+  const fetchCart = async () => {
+    setLoading(true);
+    setError(null);
+
+    const userId = getUserId();
+    if (!userId) {
+      setError("User not authenticated.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await axios.get<CartItem[]>(
+        `http://localhost:8080/cart/${userId}`,
+        {
+          headers: { Authorization: `Bearer ${Cookies.get("jwtToken")}` },
+        }
+      );
+      console.log("Fetched Cart Data:", response.data);
+
+      // Transform the data
+      const transformedCart = response.data.map((item) => ({
+        id: item.productId,
+        name: item.productName,
+        imageUrl: item.imageUrl, // Replace accordingly
+        price: item.price,
+        quantity: item.quantity,
+        designFile: "", // If applicable
+      }));
+
+      dispatch({ type: "SET_CART", payload: transformedCart });
+    } catch (err: any) {
+      console.error("Failed to fetch cart:", err);
+      setError(
+        err.response?.data?.message ||
+          "Failed to load cart. Please try again later."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch cart data from API on mount
+  useEffect(() => {
+    fetchCart();
+  }, [dispatch]);
+
+  // Log cart items for debugging
+  useEffect(() => {
+    console.log("Current Cart Items:", state.items);
+  }, [state.items]);
+
+  // Calculate total
   const total = state.items.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
 
-  const handleQuantityChange = (id: number, quantity: number) => {
+  // Handle quantity changes
+  const handleQuantityChange = async (id: string, quantity: number) => {
+    const userId = getUserId();
+    if (!userId) {
+      setError("User not authenticated.");
+      return;
+    }
+
     if (quantity === 0) {
-      dispatch({ type: "REMOVE_FROM_CART", payload: id });
+      // Remove item using the new API endpoint
+      try {
+        await axios.delete(`http://localhost:8080/cart/remove`, {
+          headers: { Authorization: `Bearer ${Cookies.get("jwtToken")}` },
+          params: { userId, productId: id },
+        });
+        // After successful removal, fetch the updated cart
+        await fetchCart();
+      } catch (err: any) {
+        console.error("Failed to remove item from cart:", err);
+        setError(
+          err.response?.data?.message ||
+            "Failed to remove item from cart. Please try again."
+        );
+      }
     } else {
-      dispatch({
-        type: "UPDATE_QUANTITY",
-        payload: { id, quantity },
-      });
+      // Update quantity as before
+      dispatch({ type: "UPDATE_QUANTITY", payload: { id, quantity } });
+      try {
+        await axios.put(
+          `http://localhost:8080/cart/${userId}/items/${id}`,
+          { quantity },
+          {
+            headers: {
+              Authorization: `Bearer ${Cookies.get("jwtToken")}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      } catch (err: any) {
+        console.error("Failed to update cart item:", err);
+        setError(
+          err.response?.data?.message ||
+            "Failed to update cart. Please try again."
+        );
+        // Optionally, refetch cart to synchronize state
+        await fetchCart();
+      }
     }
   };
 
-  const handleCheckout = (e: React.FormEvent) => {
+  // Handle Checkout
+  const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowCheckout(false);
     setShowOrderConfirmation(true);
+    // Implement order submission logic here if needed
   };
 
+  // Handle Finish Order
   const handleFinishOrder = () => {
     setShowOrderConfirmation(false);
     dispatch({ type: "CLEAR_CART" });
+    // Optionally, navigate the user to another page
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <p className="text-gray-600">Loading your cart...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <X className="w-16 h-16 mx-auto text-red-500 mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
+        <p className="text-gray-600">{error}</p>
+      </div>
+    );
+  }
 
   if (state.items.length === 0 && !showOrderConfirmation) {
     return (
@@ -71,7 +212,7 @@ export default function CartPage() {
             >
               <div className="flex items-center p-4">
                 <img
-                  src={item.imageUrl}
+                  src={item.imageUrl || "/placeholder-image.jpg"} // Use placeholder if imageUrl is missing
                   alt={item.name}
                   className="w-24 h-24 object-cover rounded-md"
                 />
@@ -89,10 +230,9 @@ export default function CartPage() {
                       )}
                     </div>
                     <button
-                      onClick={() =>
-                        dispatch({ type: "REMOVE_FROM_CART", payload: item.id })
-                      }
+                      onClick={() => handleQuantityChange(item.id, 0)} // Remove item
                       className="text-gray-400 hover:text-gray-600 transition-colors"
+                      aria-label="Remove item"
                     >
                       <X size={20} />
                     </button>
@@ -103,6 +243,8 @@ export default function CartPage() {
                         handleQuantityChange(item.id, item.quantity - 1)
                       }
                       className="text-gray-500 hover:text-gray-700 transition-colors"
+                      disabled={item.quantity <= 1}
+                      aria-label="Decrease quantity"
                     >
                       -
                     </button>
@@ -112,6 +254,7 @@ export default function CartPage() {
                         handleQuantityChange(item.id, item.quantity + 1)
                       }
                       className="text-gray-500 hover:text-gray-700 transition-colors"
+                      aria-label="Increase quantity"
                     >
                       +
                     </button>
@@ -122,6 +265,7 @@ export default function CartPage() {
           ))}
         </div>
 
+        {/* Order Summary */}
         <div className="bg-white p-6 rounded-lg shadow-sm h-fit">
           <h2 className="text-xl font-bold mb-6">Order Summary</h2>
           <div className="space-y-4 mb-6">
@@ -262,6 +406,7 @@ export default function CartPage() {
                   />
                 </div>
               </div>
+              {error && <div className="text-red-500 text-sm">{error}</div>}
               <div className="flex justify-end space-x-4 mt-6">
                 <button
                   type="button"
@@ -290,7 +435,6 @@ export default function CartPage() {
             className="relative shadow-xl max-w-md w-full bg-white"
             style={{
               // Create a subtle zigzag pattern with small increments.
-              // Every 2% horizontally, alternate between baseline (0% or 100%) and a small offset (2% or 98%).
               clipPath: `
                 polygon(
                   /* Top edge */

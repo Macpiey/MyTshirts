@@ -1,20 +1,22 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Loader } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import * as api from '../../services/api';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Mail, Lock, User, Loader } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import axios from "axios";
 
 export default function RegisterForm() {
   const navigate = useNavigate();
   const { dispatch } = useAuth();
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    firstName: '',
-    lastName: '',
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState(5);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -26,18 +28,52 @@ export default function RegisterForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
 
     try {
-      dispatch({ type: 'AUTH_START' });
-      const user = await api.register(formData);
-      dispatch({ type: 'AUTH_SUCCESS', payload: user });
-      navigate('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      dispatch({ type: "AUTH_START" });
+
+      const response = await axios.post(
+        "http://localhost:8080/api/auth/signup",
+        {
+          firstname: formData.firstName,
+          lastname: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const user = response.data;
+      dispatch({ type: "AUTH_SUCCESS", payload: user });
+      setSuccess("Registration successful! Redirecting in 5 seconds...");
+      const timer = setInterval(() => {
+        setRedirectCountdown((prev) => prev - 1);
+      }, 1000);
+
+      setTimeout(() => {
+        clearInterval(timer);
+        navigate("/login");
+      }, 5000);
+    } catch (err: any) {
+      let errorMessage = "Registration failed";
+
+      if (
+        err.response?.data?.message &&
+        Array.isArray(err.response.data.message)
+      ) {
+        errorMessage = err.response.data.message.join(" ");
+      }
+
+      setError(errorMessage);
       dispatch({
-        type: 'AUTH_FAILURE',
-        payload: err instanceof Error ? err.message : 'Registration failed',
+        type: "AUTH_FAILURE",
+        payload: errorMessage,
       });
     } finally {
       setLoading(false);
@@ -49,6 +85,12 @@ export default function RegisterForm() {
       <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
         Create Account
       </h2>
+
+      {success && (
+        <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-md text-sm">
+          {success} ({redirectCountdown} seconds remaining)
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
@@ -164,33 +206,11 @@ export default function RegisterForm() {
             {loading ? (
               <Loader className="w-5 h-5 animate-spin" />
             ) : (
-              'Create Account'
+              "Create Account"
             )}
           </button>
         </div>
       </form>
-
-      <div className="mt-6">
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">
-              Already have an account?
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <button
-            onClick={() => navigate('/login')}
-            className="w-full flex justify-center py-2 px-4 border border-primary-600 rounded-md shadow-sm text-sm font-medium text-primary-600 bg-white hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            Sign In
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
