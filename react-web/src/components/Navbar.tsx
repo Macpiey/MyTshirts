@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import Cookies from "js-cookie";
 import axios from "axios";
 import { jwtDecode } from "jwt-decode";
+import { useCart } from "../context/CartContext";
 
 const categories = ["Shirts", "Pants", "Sweatpants", "Sweatshirts", "T-shirts"];
 
@@ -33,10 +34,14 @@ export default function Navbar() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loadingCart, setLoadingCart] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const { state: cartState } = useCart();
 
-  const cartItemsCount = cartItems.length;
+  const cartItemsCount = cartState.items.reduce(
+    (count, item) => count + item.quantity,
+    0
+  );
 
-  const userEmail = authState.userEmail;
+  const userEmail = authState.user?.email;
 
   const handleCatalogEnter = () => {
     if (timeoutRef.current) {
@@ -130,11 +135,16 @@ export default function Navbar() {
         <div className="flex justify-between h-16">
           {/* Left Side */}
           <div className="flex items-center">
-            <Link to="/" className="flex items-center space-x-2">
-              <span className="text-2xl font-bold bg-white text-primary-600 px-3 py-1 rounded-md">
-                MT
+            <Link to="/" className="flex items-center">
+              <span className="text-2xl font-bold text-primary-600 rounded-md">
+                <img
+                  src="src\styles\myTshirt.png"
+                  alt="MyTshirt Inc. Logo"
+                  className="max-h-[50px] max-w-[50px]" // Limit the height of the logo
+                />
               </span>
-              <span className="text-xl font-semibold hidden sm:block">
+
+              <span className="text-xl pl-3 font-semibold hidden sm:block">
                 MyTshirt Inc.
               </span>
             </Link>
@@ -183,7 +193,7 @@ export default function Navbar() {
             >
               <ShoppingCart size={24} />
               {cartItemsCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-accent-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs animate-bounce">
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
                   {cartItemsCount}
                 </span>
               )}

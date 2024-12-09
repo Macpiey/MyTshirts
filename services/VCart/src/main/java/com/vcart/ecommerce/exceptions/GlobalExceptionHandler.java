@@ -67,4 +67,13 @@ public class GlobalExceptionHandler {
         response.put("message", List.of("An unexpected error occurred. Please try again later."));
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    @ExceptionHandler(CartEmptyException.class)
+    public ResponseEntity<Map<String, Object>> handleCartEmptyException(CartEmptyException ex) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.OK.value());
+        response.put("message", ex.getMessage());
+        return new ResponseEntity<>(response, HttpStatus.OK);
+    }
 }

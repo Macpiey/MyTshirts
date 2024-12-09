@@ -1,6 +1,6 @@
-import React from 'react';
-import { ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import React from "react";
+import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function HeroSection() {
   return (
@@ -9,10 +9,11 @@ export default function HeroSection() {
       <div className="relative max-w-7xl mx-auto px-4 py-24 sm:px-6 lg:px-8">
         <div className="text-center">
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl mb-6">
-            Spring Collection 2024
+            Christmas Collection 2024
           </h1>
           <p className="max-w-xl mx-auto text-xl text-primary-100 mb-8">
-            Discover our latest arrivals featuring breathable fabrics and modern designs perfect for the season.
+            Discover our latest arrivals featuring breathable fabrics and modern
+            designs perfect for the season.
           </p>
           <div className="flex justify-center space-x-4">
             <Link

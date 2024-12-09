@@ -43,42 +43,56 @@ export default function RegisterForm() {
           password: formData.password,
         },
         {
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
         }
       );
 
-      const user = response.data;
-      dispatch({ type: "AUTH_SUCCESS", payload: user });
-      setSuccess("Registration successful! Redirecting in 5 seconds...");
-      const timer = setInterval(() => {
-        setRedirectCountdown((prev) => prev - 1);
-      }, 1000);
+      const { message, userId } = response.data;
 
-      setTimeout(() => {
-        clearInterval(timer);
-        navigate("/login");
-      }, 5000);
-    } catch (err: any) {
-      let errorMessage = "Registration failed";
+      if (userId) {
+        dispatch({
+          type: "AUTH_SUCCESS",
+          payload: { jwtToken: "" }, // Empty token for now
+        });
 
-      if (
-        err.response?.data?.message &&
-        Array.isArray(err.response.data.message)
-      ) {
-        errorMessage = err.response.data.message.join(" ");
+        setSuccess(`${message} Redirecting in 5 seconds...`);
+        setRedirectCountdown(5); // Reset countdown
+      } else {
+        throw new Error("Invalid response: Missing userId.");
       }
-
+    } catch (err: any) {
+      const errorMessage =
+        err.response?.data?.message ||
+        "Registration failed. Please try again later.";
       setError(errorMessage);
-      dispatch({
-        type: "AUTH_FAILURE",
-        payload: errorMessage,
-      });
+      dispatch({ type: "AUTH_FAILURE", payload: errorMessage });
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+
+    if (success) {
+      timer = setInterval(() => {
+        setRedirectCountdown((prev) => {
+          if (prev === 1) {
+            clearInterval(timer!); // Stop the interval
+            navigate("/login"); // Redirect
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    // Cleanup function for the interval
+    return () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [success, navigate]);
 
   return (
     <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
@@ -107,23 +121,17 @@ export default function RegisterForm() {
             >
               First Name
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <User className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                id="firstName"
-                name="firstName"
-                type="text"
-                required
-                value={formData.firstName}
-                onChange={handleChange}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-                placeholder="First name"
-              />
-            </div>
+            <input
+              id="firstName"
+              name="firstName"
+              type="text"
+              required
+              value={formData.firstName}
+              onChange={handleChange}
+              className="block w-full py-2 border border-gray-300 rounded-md"
+              placeholder="First name"
+            />
           </div>
-
           <div>
             <label
               htmlFor="lastName"
@@ -131,24 +139,18 @@ export default function RegisterForm() {
             >
               Last Name
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <User className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                id="lastName"
-                name="lastName"
-                type="text"
-                required
-                value={formData.lastName}
-                onChange={handleChange}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-                placeholder="Last name"
-              />
-            </div>
+            <input
+              id="lastName"
+              name="lastName"
+              type="text"
+              required
+              value={formData.lastName}
+              onChange={handleChange}
+              className="block w-full py-2 border border-gray-300 rounded-md"
+              placeholder="Last name"
+            />
           </div>
         </div>
-
         <div>
           <label
             htmlFor="email"
@@ -156,23 +158,17 @@ export default function RegisterForm() {
           >
             Email
           </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Mail className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={formData.email}
-              onChange={handleChange}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Enter your email"
-            />
-          </div>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            value={formData.email}
+            onChange={handleChange}
+            className="block w-full py-2 border border-gray-300 rounded-md"
+            placeholder="Enter your email"
+          />
         </div>
-
         <div>
           <label
             htmlFor="password"
@@ -180,36 +176,24 @@ export default function RegisterForm() {
           >
             Password
           </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Lock className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              value={formData.password}
-              onChange={handleChange}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-              placeholder="Create a password"
-            />
-          </div>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            value={formData.password}
+            onChange={handleChange}
+            className="block w-full py-2 border border-gray-300 rounded-md"
+            placeholder="Create a password"
+          />
         </div>
-
-        <div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <Loader className="w-5 h-5 animate-spin" />
-            ) : (
-              "Create Account"
-            )}
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-2 px-4 bg-primary-600 text-white rounded-md"
+        >
+          {loading ? <Loader className="animate-spin" /> : "Create Account"}
+        </button>
       </form>
     </div>
   );

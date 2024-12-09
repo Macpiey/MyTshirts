@@ -6,6 +6,7 @@ import { X, ShoppingBag, CreditCard, Truck, Check } from "lucide-react";
 import { jwtDecode } from "jwt-decode"; // Corrected import
 import axios from "axios";
 import Cookies from "js-cookie";
+import myTshirt from "./../styles/myTshirt.png";
 
 export default function CartPage() {
   const { state, dispatch } = useCart();
@@ -43,7 +44,6 @@ export default function CartPage() {
     }
   };
 
-  // Fetch cart function to synchronize state after errors or updates
   const fetchCart = async () => {
     setLoading(true);
     setError(null);
@@ -56,25 +56,36 @@ export default function CartPage() {
     }
 
     try {
-      const response = await axios.get<CartItem[]>(
-        `http://localhost:8080/cart/${userId}`,
-        {
-          headers: { Authorization: `Bearer ${Cookies.get("jwtToken")}` },
-        }
-      );
+      const response = await axios.get(`http://localhost:8080/cart/${userId}`, {
+        headers: { Authorization: `Bearer ${Cookies.get("jwtToken")}` },
+      });
+
       console.log("Fetched Cart Data:", response.data);
 
-      // Transform the data
-      const transformedCart = response.data.map((item) => ({
-        id: item.productId,
-        name: item.productName,
-        imageUrl: item.imageUrl, // Replace accordingly
-        price: item.price,
-        quantity: item.quantity,
-        designFile: "", // If applicable
-      }));
+      // Check if response data is an array
+      if (Array.isArray(response.data)) {
+        // Transform the data
+        const transformedCart = response.data.map((item: any) => ({
+          id: item.productId,
+          name: item.productName,
+          imageUrl: item.imageUrl, // Replace accordingly
+          price: item.price,
+          quantity: item.quantity,
+          fileUploadedName: item.fileUploadedName,
+        }));
 
-      dispatch({ type: "SET_CART", payload: transformedCart });
+        dispatch({ type: "SET_CART", payload: transformedCart });
+      } else if (
+        response.data.message &&
+        response.data.message.includes("Cart is empty")
+      ) {
+        // If cart is empty, clear the cart state
+        dispatch({ type: "SET_CART", payload: [] });
+        console.log(response.data.message);
+      } else {
+        // Handle unexpected response structure
+        setError("Unexpected response from the server.");
+      }
     } catch (err: any) {
       console.error("Failed to fetch cart:", err);
       setError(
@@ -102,53 +113,105 @@ export default function CartPage() {
     0
   );
 
-  // Handle quantity changes
-  const handleQuantityChange = async (id: string, quantity: number) => {
+  // Handle Increment
+  const handleIncrement = async (id: string) => {
     const userId = getUserId();
-    if (!userId) {
+    const token = Cookies.get("jwtToken");
+
+    if (!userId || !token) {
       setError("User not authenticated.");
       return;
     }
 
-    if (quantity === 0) {
-      // Remove item using the new API endpoint
-      try {
-        await axios.delete(`http://localhost:8080/cart/remove`, {
-          headers: { Authorization: `Bearer ${Cookies.get("jwtToken")}` },
-          params: { userId, productId: id },
-        });
-        // After successful removal, fetch the updated cart
-        await fetchCart();
-      } catch (err: any) {
-        console.error("Failed to remove item from cart:", err);
-        setError(
-          err.response?.data?.message ||
-            "Failed to remove item from cart. Please try again."
-        );
+    const cartItem = state.items.find((item) => item.id === id);
+
+    const url = `http://localhost:8080/cart/add?userId=${encodeURIComponent(
+      userId
+    )}&productId=${encodeURIComponent(id)}&quantity=${1}`;
+
+    try {
+      const formData = new FormData();
+      if (cartItem?.fileUploadedName) {
+        formData.append("file", cartItem.fileUploadedName);
       }
-    } else {
-      // Update quantity as before
-      dispatch({ type: "UPDATE_QUANTITY", payload: { id, quantity } });
-      try {
-        await axios.put(
-          `http://localhost:8080/cart/${userId}/items/${id}`,
-          { quantity },
-          {
-            headers: {
-              Authorization: `Bearer ${Cookies.get("jwtToken")}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-      } catch (err: any) {
-        console.error("Failed to update cart item:", err);
-        setError(
-          err.response?.data?.message ||
-            "Failed to update cart. Please try again."
-        );
-        // Optionally, refetch cart to synchronize state
-        await fetchCart();
-      }
+
+      await axios.post(url, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      console.log("Cart updated on server.");
+      await fetchCart();
+    } catch (err: any) {
+      console.error("Failed to add to cart on server:", err);
+      setError(
+        err.response?.data?.message ||
+          "Failed to update cart. Please try again."
+      );
+    }
+  };
+
+  // Handle Decrement
+  // Handle Decrement
+  const handleDecrement = async (id: string) => {
+    const userId = getUserId();
+    const token = Cookies.get("jwtToken");
+
+    if (!userId || !token) {
+      setError("User not authenticated.");
+      return;
+    }
+
+    // Corrected URL: Changed '/add' to '/cart/add'
+    const url = `http://localhost:8080/cart/add?userId=${encodeURIComponent(
+      userId
+    )}&productId=${encodeURIComponent(id)}&quantity=${-1}`;
+
+    const formData = new FormData();
+    formData.append("file", ""); // Assuming no file is needed for decrement
+
+    try {
+      await axios.post(url, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data", // Ensure consistency with handleIncrement
+        },
+      });
+      console.log("Cart decremented on server.");
+      await fetchCart();
+    } catch (err: any) {
+      console.error("Failed to decrement cart on server:", err);
+      setError(
+        err.response?.data?.message ||
+          "Failed to update cart. Please try again."
+      );
+    }
+  };
+
+  // Handle Remove Item
+  const handleRemoveItem = async (id: string) => {
+    const userId = getUserId();
+    const token = Cookies.get("jwtToken");
+
+    if (!userId || !token) {
+      setError("User not authenticated.");
+      return;
+    }
+
+    try {
+      await axios.delete(`http://localhost:8080/cart/remove`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { userId, productId: id },
+      });
+      // After successful removal, fetch the updated cart
+      await fetchCart();
+    } catch (err: any) {
+      console.error("Failed to remove item from cart:", err);
+      setError(
+        err.response?.data?.message ||
+          "Failed to remove item from cart. Please try again."
+      );
     }
   };
 
@@ -223,14 +286,14 @@ export default function CartPage() {
                       <p className="text-sm text-gray-600 mt-1">
                         ${item.price.toFixed(2)}
                       </p>
-                      {item.designFile && (
+                      {item.fileUploadedName && (
                         <div className="mt-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-                          Custom Design: {item.designFile}
+                          Custom Design: {item.fileUploadedName}
                         </div>
                       )}
                     </div>
                     <button
-                      onClick={() => handleQuantityChange(item.id, 0)} // Remove item
+                      onClick={() => handleRemoveItem(item.id)} // Remove item
                       className="text-gray-400 hover:text-gray-600 transition-colors"
                       aria-label="Remove item"
                     >
@@ -239,9 +302,7 @@ export default function CartPage() {
                   </div>
                   <div className="flex items-center space-x-4 mt-4">
                     <button
-                      onClick={() =>
-                        handleQuantityChange(item.id, item.quantity - 1)
-                      }
+                      onClick={() => handleDecrement(item.id)}
                       className="text-gray-500 hover:text-gray-700 transition-colors"
                       disabled={item.quantity <= 1}
                       aria-label="Decrease quantity"
@@ -250,9 +311,7 @@ export default function CartPage() {
                     </button>
                     <span className="font-medium">{item.quantity}</span>
                     <button
-                      onClick={() =>
-                        handleQuantityChange(item.id, item.quantity + 1)
-                      }
+                      onClick={() => handleIncrement(item.id)}
                       className="text-gray-500 hover:text-gray-700 transition-colors"
                       aria-label="Increase quantity"
                     >
@@ -475,10 +534,14 @@ export default function CartPage() {
             }}
           >
             <div className="p-6">
+              {/* Logo Section */}
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-8 h-8 text-primary-600" />
-                </div>
+                <img
+                  src={myTshirt}
+                  alt="Company Logo"
+                  className="w-[100px] h-[100px] mx-auto mb-[-20px]"
+                />
+
                 <h2 className="text-2xl font-bold text-gray-900">
                   Order Confirmed!
                 </h2>
@@ -494,9 +557,9 @@ export default function CartPage() {
                         <p className="text-sm text-gray-600">
                           Qty: {item.quantity}
                         </p>
-                        {item.designFile && (
+                        {item.fileUploadedName && (
                           <p className="text-sm text-primary-600">
-                            Custom Design: {item.designFile}
+                            Custom Design: {item.fileUploadedName}
                           </p>
                         )}
                       </div>

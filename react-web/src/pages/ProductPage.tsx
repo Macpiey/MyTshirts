@@ -15,7 +15,7 @@ interface JwtPayload {
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
-  const { dispatch } = useCart();
+  const { dispatch, fetchCartFromServer } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [designFile, setDesignFile] = useState<File | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -96,53 +96,40 @@ export default function ProductPage() {
   };
 
   const handleAddToCart = async () => {
-    // Dispatch to local cart context
     dispatch({
       type: "ADD_TO_CART",
       payload: {
         ...product,
-        designFile: designFile ? designFile.name : undefined,
         quantity,
       },
     });
 
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 2000);
-
-    // Get JWT token from cookies
     const token = getJwtToken();
-
     if (token) {
       const userId = getUserIdFromToken(token);
-
-      if (!userId) {
-        console.error("User ID not found in token.");
-        return;
-      }
-
-      // Prepare the payload
-      const payload = {
-        userId,
-        productId: product.id,
-        productName: product.name,
-        price: product.price,
-        quantity,
-      };
+      if (!userId) return;
 
       try {
-        await axios.post("http://localhost:8080/cart/add", payload, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-        console.log("Cart updated on server.");
+        const url = `http://localhost:8080/cart/add?userId=${userId}&productId=${product.id}&quantity=${quantity}`;
+
+        // Create the payload dynamically
+        let payload;
+        const headers = { Authorization: `Bearer ${token}` };
+
+        if (designFile) {
+          const formData = new FormData();
+          formData.append("file", designFile);
+          payload = formData;
+          headers["Content-Type"] = "multipart/form-data";
+        } else {
+          payload = {}; // Existing payload when no file is provided
+        }
+
+        await axios.post(url, payload, { headers });
+        await fetchCartFromServer(); // Refresh cart from server
       } catch (error) {
-        console.error("Failed to add to cart on server:", error);
-        // Optionally, you can revert the local cart update or notify the user
+        console.error("Failed to add to cart:", error);
       }
-    } else {
-      console.log("No JWT token found. Cart updated locally only.");
     }
   };
 

@@ -2,13 +2,13 @@ package com.vcart.ecommerce.service;
 
 import com.vcart.ecommerce.entity.CartItem;
 import com.vcart.ecommerce.entity.Product;
+import com.vcart.ecommerce.exceptions.CartEmptyException;
 import com.vcart.ecommerce.repository.CartItemRepository;
 import com.vcart.ecommerce.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,20 +26,17 @@ public class CartService {
 
     // Get cart by user ID
     public List<CartItem> getCartByUserId(String userId) {
-        // Validate User ID
         boolean userExists = userRepository.findById(userId).isPresent();
         if (!userExists) {
             throw new IllegalArgumentException("User with ID " + userId + " does not exist.");
         }
-
         List<CartItem> cartItems = cartItemRepository.findByUserId(userId);
 
         if (cartItems.isEmpty()) {
-            throw new IllegalArgumentException("Cart is empty for user with ID " + userId);
+            throw new CartEmptyException("Cart is empty for user with ID " + userId);
         }
-
         return cartItems;
-    }
+    } 
 
     // Add to cart
     public CartItem addToCart(String userId, String productId, int quantity, String fileUploadedName) {
@@ -58,6 +55,10 @@ public class CartService {
         if (existingCartItemOpt.isPresent()) {
             cartItem = existingCartItemOpt.get();
             cartItem.setQuantity(cartItem.getQuantity() + quantity);
+            // Update fileUploadedName only if a new valid value is provided
+            if (fileUploadedName != null && !fileUploadedName.isEmpty()) {
+                cartItem.setFileUploadedName(fileUploadedName);
+            }
         } else {
             cartItem = new CartItem();
             cartItem.setUserId(userId);
@@ -68,8 +69,9 @@ public class CartService {
             cartItem.setImageUrl(product.getImageUrl());
             cartItem.setFileUploadedName(fileUploadedName);
         }
-        return cartItemRepository.save(cartItem);
-    }
+    return cartItemRepository.save(cartItem);
+    }   
+
 
     // Remove from cart
     public void removeFromCart(String userId, String productId) {
@@ -106,7 +108,7 @@ public class CartService {
 
         // Calculate total
         return cartItems.stream()
-                .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

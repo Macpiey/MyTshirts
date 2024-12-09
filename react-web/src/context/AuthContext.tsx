@@ -11,7 +11,7 @@ import { jwtDecode } from "jwt-decode";
 
 interface AuthState {
   isAuthenticated: boolean;
-  userEmail: string | null;
+  user: { email: string | null; [key: string]: any } | null;
   jwtToken: string | null;
   loading: boolean;
   error: string | null;
@@ -25,7 +25,7 @@ type AuthAction =
 
 const initialState: AuthState = {
   isAuthenticated: false,
-  userEmail: null,
+  user: null,
   jwtToken: null,
   loading: false,
   error: null,
@@ -34,28 +34,45 @@ const initialState: AuthState = {
 const AuthContext = createContext<{
   state: AuthState;
   dispatch: React.Dispatch<AuthAction>;
-}>({
-  state: initialState,
-  dispatch: () => null,
-});
+} | null>(null);
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
     case "AUTH_START":
       return { ...state, loading: true, error: null };
     case "AUTH_SUCCESS":
-      const decoded: any = jwtDecode(action.payload.jwtToken);
+      const { jwtToken } = action.payload;
+      if (!jwtToken || jwtToken.split(".").length !== 3) {
+        console.error("Invalid token format");
+        return { ...state, error: "Invalid token format", loading: false };
+      }
+      try {
+        const decoded: any = jwtDecode(jwtToken);
+        return {
+          ...state,
+          isAuthenticated: true,
+          user: {
+            email: decoded.email || decoded.username || null,
+            ...decoded,
+          },
+          jwtToken,
+          loading: false,
+          error: null,
+        };
+      } catch (error) {
+        console.error("Error decoding token", error);
+        return { ...state, error: "Error decoding token", loading: false };
+      }
+    case "AUTH_FAILURE":
       return {
         ...state,
-        isAuthenticated: true,
-        userEmail: decoded.username || decoded.email || null,
-        jwtToken: action.payload.jwtToken,
+        user: null,
+        isAuthenticated: false,
         loading: false,
-        error: null,
+        error: action.payload,
       };
-    case "AUTH_FAILURE":
-      return { ...state, loading: false, error: action.payload };
     case "SIGN_OUT":
+      Cookies.remove("jwtToken");
       return { ...initialState };
     default:
       return state;
@@ -65,11 +82,18 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // On initial mount, check if a JWT token exists in cookies
   useEffect(() => {
     const token = Cookies.get("jwtToken");
-    if (token) {
-      dispatch({ type: "AUTH_SUCCESS", payload: { jwtToken: token } });
+    if (token && token.split(".").length === 3) {
+      try {
+        dispatch({ type: "AUTH_SUCCESS", payload: { jwtToken: token } });
+      } catch (err) {
+        console.error("Failed to decode token", err);
+        dispatch({ type: "SIGN_OUT" });
+      }
+    } else if (token) {
+      console.error("Invalid token format");
+      dispatch({ type: "SIGN_OUT" });
     }
   }, []);
 
@@ -80,4 +104,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};

@@ -9,6 +9,8 @@ export interface Product {
 }
 
 export interface CartItem {
+  productName: any;
+  fileUploadedName: any;
   id: string; // Cart item ID from API
   productId: string;
   name: string; // productName from API
